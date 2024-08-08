@@ -37,8 +37,8 @@ else()
 	add_definitions(-std=c++20)
 endif()
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Charts Core Gui Xml)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Charts Core Gui Xml)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Charts Core Graphs Gui Xml)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Charts Core Graphs Gui Xml)
 
 message(STATUS "Using Qt version ${QT_VERSION_MAJOR}.")
 
@@ -53,9 +53,22 @@ include_directories("${PROJECT_SOURCE_DIR}/src")
 # Main Sources
 file(GLOB PROJECT_HEADERS ${PROJECT_SOURCE_DIR}/src/*.hpp)
 file(GLOB PROJECT_SOURCES_CPP ${PROJECT_SOURCE_DIR}/src/*.cpp)
+file(GLOB PROJECT_SOURCES_UI ${PROJECT_SOURCE_DIR}/src/*.ui)
 
-add_executable(${CMAKE_PROJECT_NAME} ${PROJECT_HEADERS} ${PROJECT_SOURCES_CPP})
+
+if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
+	qt_add_executable(${CMAKE_PROJECT_NAME}
+		MANUAL_FINALIZATION
+		${PROJECT_HEADERS} ${PROJECT_SOURCES_CPP} ${PROJECT_SOURCES_UI}
+	)
+else()
+	add_executable(${CMAKE_PROJECT_NAME} ${PROJECT_HEADERS} ${PROJECT_SOURCES_CPP})
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Charts Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Gui Qt${QT_VERSION_MAJOR}::Xml)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Charts Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Graphs Qt${QT_VERSION_MAJOR}::Gui Qt${QT_VERSION_MAJOR}::Xml)
+
+if(QT_VERSION_MAJOR GREATER_EQUAL 6)
+    qt_finalize_executable(${CMAKE_PROJECT_NAME})
+endif()

@@ -8,36 +8,15 @@
 #include <vector>
 
 #include <QAnyStringView>
-#include <QDateTime>
 #include <QDomDocument>
 
 #include "MappedFileString.hpp"
-
-static constexpr double INVALID_VALUE = -999999.999;
-
-struct Trackpoint {
-	QDateTime dateTime;
-
-	double latitudeDegrees;
-	double longitudeDegrees;
-	double altitudeMeters;
-	double distanceMeters;
-	std::int_fast16_t heartRateBpm;
-
-	Trackpoint() : 
-		dateTime(), 
-		latitudeDegrees(INVALID_VALUE), 
-		longitudeDegrees(INVALID_VALUE), 
-		altitudeMeters(INVALID_VALUE), 
-		distanceMeters(INVALID_VALUE), 
-		heartRateBpm(-999)
-	{}
-};
+#include "Trackpoint.hpp"
 
 class Parser {
 public:
 
-	Parser(std::filesystem::path const& inputFile) : m_inputFile(inputFile) {
+	Parser(std::filesystem::path const& inputFile, bool doDebugOutput) : m_inputFile(inputFile) {
 		MappedFileString mappedInputFile(inputFile.string());
 		QAnyStringView contentView(mappedInputFile.GetView());
 		QDomDocument doc;
@@ -47,7 +26,7 @@ public:
 			throw;
 		}
 
-		m_trackpoints = ParseRunningTrackpoints(doc);
+		m_trackpoints = ParseRunningTrackpoints(doc, doDebugOutput);
 
 	}
 	virtual ~Parser() {
@@ -120,7 +99,7 @@ private:
 		return node.toElement();
 	}
 
-	std::vector<Trackpoint> ParseRunningTrackpoints(QDomDocument const& doc) const {
+	std::vector<Trackpoint> ParseRunningTrackpoints(QDomDocument const& doc, bool doDebugOutput) const {
 		std::vector<Trackpoint> result;
 		
 		auto const trainingCenterDatabase = ensureIsElement(getChildAtIndex(doc, 1, "TrainingCenterDatabase"));
@@ -155,7 +134,7 @@ private:
 			tp.dateTime = QDateTime::fromString(childTime.text(), Qt::ISODateWithMs);
 
 			if (tp.dateTime.toString("zzz").compare("000") != 0) {
-				std::cerr << "Warning: Ignoring trackpoint #" << i << " not on second boundary!" << std::endl;
+				if (doDebugOutput) std::cerr << "Warning: Ignoring trackpoint #" << i << " not on second boundary!" << std::endl;
 				continue;
 			}
 			
@@ -173,7 +152,7 @@ private:
 			tp.distanceMeters = std::stod(childDistance.text().toStdString());
 
 			if (tp.distanceMeters < lastDistanceInMeters) {
-				std::cerr << "Warning: Fixing distance on point #" << i << "!" << std::endl;
+				if (doDebugOutput) std::cerr << "Warning: Fixing distance on point #" << i << "!" << std::endl;
 				tp.distanceMeters = lastDistanceInMeters;
 			}
 			lastDistanceInMeters = tp.distanceMeters;
