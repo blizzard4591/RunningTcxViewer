@@ -1,18 +1,19 @@
 #pragma once
 
-#include <filesystem>
+#include <string>
 #include <optional>
 #include <vector>
 
 #include <QMainWindow>
 
-#include "ChartView.hpp"
 #include "DataOptions.hpp"
 #include "Trackpoint.hpp"
 
 namespace Ui {
 class MainWindow;
 }
+
+class ChartView;
 
 class MainWindow : public QMainWindow
 {
@@ -33,7 +34,7 @@ public slots:
 private:
     Ui::MainWindow *ui;
 
-    std::filesystem::path m_selectedFile;
+    std::string m_selectedFile;
     ChartView* m_lastChartView = nullptr;
     std::optional<std::vector<Trackpoint>> m_trackpoints = std::nullopt;
 };

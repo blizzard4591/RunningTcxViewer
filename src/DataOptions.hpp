@@ -28,7 +28,7 @@ public:
     }
 
 public slots:
-    void OnCBoxCheckStateChanged(Qt::CheckState state);
+    void OnCBoxCheckStateChanged(int state);
     void OnSBoxValueChanged(int value);
     void OnDBoxMinValueChanged(double value);
     void OnDBoxMaxValueChanged(double value);

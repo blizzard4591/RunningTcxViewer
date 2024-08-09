@@ -26,6 +26,9 @@ if(MSVC AND MT)
     set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} /MTd")
 endif()
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED True)
+
 if (MSVC)
 	add_definitions(/std:c++20)
 	add_definitions(/DNOMINMAX)
@@ -33,17 +36,18 @@ if (MSVC)
 	add_definitions(/DPSAPI_VERSION=1)
 	add_definitions(/D_CRT_SECURE_NO_WARNINGS)
 	add_definitions(/W4)
-else()
-	add_definitions(-std=c++20)
 endif()
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Charts Core Graphs Gui Xml)
-find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Charts Core Graphs Gui Xml)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Charts Core Gui Xml)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Charts Core Gui Xml)
 
 message(STATUS "Using Qt version ${QT_VERSION_MAJOR}.")
 
-if ("${QT_VERSION_MAJOR}" STREQUAL "6")
+if ("${QT_VERSION_MAJOR}" STREQUAL "6" AND ${QT_VERSION_MINOR} GREATER_EQUAL 3)
 	qt_standard_project_setup()
+else()
+	set(CMAKE_AUTOMOC ON)
+	set(CMAKE_AUTOUIC ON)
 endif()
 
 # Add base folder for better inclusion paths
@@ -67,7 +71,7 @@ endif()
 
 set(CMAKE_CXX_STANDARD 20)
 
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Charts Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Graphs Qt${QT_VERSION_MAJOR}::Gui Qt${QT_VERSION_MAJOR}::Xml)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt${QT_VERSION_MAJOR}::Charts Qt${QT_VERSION_MAJOR}::Core Qt${QT_VERSION_MAJOR}::Gui Qt${QT_VERSION_MAJOR}::Xml)
 
 if(QT_VERSION_MAJOR GREATER_EQUAL 6)
     qt_finalize_executable(${CMAKE_PROJECT_NAME})

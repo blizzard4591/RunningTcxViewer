@@ -205,7 +205,7 @@ void MainWindow::UpdateChart() {
 	if (!m_trackpoints.has_value()) {
 		if (!std::filesystem::exists(m_selectedFile)) {
 			if (DO_DEBUG) std::cerr << "Error: Input file " << m_selectedFile << " does not exist!" << std::endl;
-			ui->statusbar->showMessage(QString("Error: Input file '%1' does not exist!").arg(QString::fromStdString(m_selectedFile.string())));
+			ui->statusbar->showMessage(QString("Error: Input file '%1' does not exist!").arg(QString::fromStdString(m_selectedFile)));
 			return;
 		}
 

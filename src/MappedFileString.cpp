@@ -1,12 +1,16 @@
 #include "MappedFileString.hpp"
 
+#include <fstream>
 #include <iostream>
 
+#ifdef _MSC_VER
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #include <Memoryapi.h>
+#endif
 
 MappedFileString::MappedFileString(std::string const& fqfn) {
+#ifdef _MSC_VER
 	m_fileHandle = CreateFileA(fqfn.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (m_fileHandle == INVALID_HANDLE_VALUE) {
 		std::cerr << "Internal Error: Failed to open file '" << fqfn << "', last error = " << GetLastError() << std::endl;
@@ -44,9 +48,16 @@ MappedFileString::MappedFileString(std::string const& fqfn) {
 		}
 		m_view = std::string_view(static_cast<char const*>(m_baseAddress), m_fileSize.QuadPart);
 	}
+#else
+	std::ifstream file(fqfn);
+	m_content = std::string((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+	m_view = std::string_view(m_content);
+#endif
 }
 MappedFileString::~MappedFileString() {
+#ifdef _MSC_VER
 	if (m_baseAddress != NULL) UnmapViewOfFile(m_baseAddress);
 	if (m_mapping != NULL) CloseHandle(m_mapping);
 	if (m_fileHandle != INVALID_HANDLE_VALUE) CloseHandle(m_fileHandle);
+#endif
 }

@@ -9,7 +9,7 @@ DataOptions::DataOptions(QWidget *parent)
 {
     ui->setupUi(this);
 
-    if (!QObject::connect(ui->cbox_show, SIGNAL(checkStateChanged(Qt::CheckState)), this, SLOT(OnCBoxCheckStateChanged(Qt::CheckState)))) {
+    if (!QObject::connect(ui->cbox_show, SIGNAL(stateChanged(int)), this, SLOT(OnCBoxCheckStateChanged(int)))) {
         QMessageBox::critical(this, "Internal Error", "Failed to connect signal checkStateChanged in DataOptions!");
         throw;
     }
@@ -41,8 +41,8 @@ void DataOptions::updateData() {
     m_data.cutoffMax = ui->dsbox_max->value();
 }
 
-void DataOptions::OnCBoxCheckStateChanged(Qt::CheckState state) {
-    m_data.show = (state == Qt::CheckState::Checked);
+void DataOptions::OnCBoxCheckStateChanged(int state) {
+    m_data.show = (static_cast<Qt::CheckState>(state) == Qt::CheckState::Checked);
     emit optionsChanged(this);
 }
 

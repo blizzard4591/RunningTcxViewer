@@ -9,6 +9,7 @@
 
 #include <QAnyStringView>
 #include <QDomDocument>
+#include <QtGlobal>
 
 #include "MappedFileString.hpp"
 #include "Trackpoint.hpp"
@@ -18,11 +19,20 @@ public:
 
 	Parser(std::filesystem::path const& inputFile, bool doDebugOutput) : m_inputFile(inputFile) {
 		MappedFileString mappedInputFile(inputFile.string());
-		QAnyStringView contentView(mappedInputFile.GetView());
 		QDomDocument doc;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
+		QAnyStringView contentView(mappedInputFile.GetView());
 		auto const parseResult = doc.setContent(contentView, QDomDocument::ParseOption::UseNamespaceProcessing);
+#else
+		QString const content = QString::fromStdString(mappedInputFile.GetString());
+		auto const parseResult = doc.setContent(content, true);
+#endif
 		if (!parseResult) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
 			std::cerr << "Encountered an error in XML parsing at line " << parseResult.errorLine << " and column " << parseResult.errorColumn << ": " << parseResult.errorMessage.toStdString() << std::endl;
+#else
+			std::cerr << "Encountered an error in XML parsing!" << std::endl;
+#endif
 			throw;
 		}
 
