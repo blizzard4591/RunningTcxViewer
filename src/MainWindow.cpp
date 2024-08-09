@@ -19,44 +19,49 @@
 
 static bool constexpr DO_DEBUG = false;
 
-MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent)
-    , ui(new Ui::MainWindow)
-    , m_selectedFile()
-    , m_windowSize(15)
+MainWindow::MainWindow(QWidget* parent)
+	: QMainWindow(parent)
+	, ui(new Ui::MainWindow)
+	, m_selectedFile()
 {
-    ui->setupUi(this);
+	ui->setupUi(this);
 
-	if (!QObject::connect(ui->windowSizeSlider, SIGNAL(valueChanged(int)), this, SLOT(OnSliderValueChanged(int)))) {
-		QMessageBox::critical(this, "Internal Error", "Failed to set up connection for windowSize slider!");
-		throw;
-	}
 	if (!QObject::connect(ui->action_Open, SIGNAL(triggered()), this, SLOT(SelectNewFile()))) {
 		QMessageBox::critical(this, "Internal Error", "Failed to set up connection for windowSize slider!");
 		throw;
 	}
-
-	ui->windowSizeLabel->setText("15");
+	if (!QObject::connect(ui->gbox_avgSpeed, SIGNAL(optionsChanged(DataOptions*)), this, SLOT(OnDataOptionsChanged(DataOptions*)))) {
+		QMessageBox::critical(this, "Internal Error", "Failed to set up connection for data options #1!");
+		throw;
+	}
+	if (!QObject::connect(ui->gbox_heartRate, SIGNAL(optionsChanged(DataOptions*)), this, SLOT(OnDataOptionsChanged(DataOptions*)))) {
+		QMessageBox::critical(this, "Internal Error", "Failed to set up connection for data options #2!");
+		throw;
+	}
+	if (!QObject::connect(ui->gbox_pace, SIGNAL(optionsChanged(DataOptions*)), this, SLOT(OnDataOptionsChanged(DataOptions*)))) {
+		QMessageBox::critical(this, "Internal Error", "Failed to set up connection for data options #3!");
+		throw;
+	}
 
 	QTimer::singleShot(250, this, SLOT(SelectNewFile()));
 }
 
 MainWindow::~MainWindow()
 {
-    delete ui;
+	delete ui;
 }
 
 void MainWindow::SelectNewFile() {
-    QString const filename = QFileDialog::getOpenFileName(this, "Select TCX file to display", QString(), "Trackpoints (*.tcx)");
+	QString const filename = QFileDialog::getOpenFileName(this, "Select TCX file to display", QString(), "Trackpoints (*.tcx)");
 
-    if (!filename.isNull()) {
-        m_selectedFile = filename.toStdString();
-    }
-    else {
-        m_selectedFile = "";
-    }
+	if (!filename.isNull()) {
+		m_selectedFile = filename.toStdString();
+	}
+	else {
+		m_selectedFile = "";
+	}
 
-    UpdateChart();
+	UpdateChart();
 }
 
 static inline double METERS_PER_SECOND_TO_KILOMETERS_PER_HOUR(double metersPerSecond) {
@@ -117,7 +122,7 @@ std::vector<std::tuple<Trackpoint, std::optional<double>>> GetSpeedFromTrackpoin
 	return result;
 }
 
-std::vector<std::tuple<Trackpoint, std::optional<double>, std::optional<double>>> GetMovingAverageOfVector(std::vector<std::tuple<Trackpoint, std::optional<double>>> const& input, std::size_t windowSize) {
+std::vector<std::tuple<Trackpoint, std::optional<double>, std::optional<double>>> GetMovingAverageOfVectorOld(std::vector<std::tuple<Trackpoint, std::optional<double>>> const& input, std::size_t windowSize) {
 	std::vector<std::tuple<Trackpoint, std::optional<double>, std::optional<double>>> result;
 
 	for (std::size_t i = 0; i < input.size(); ++i) {
@@ -146,44 +151,108 @@ std::vector<std::tuple<Trackpoint, std::optional<double>, std::optional<double>>
 	return result;
 }
 
+template<typename Callable, typename... OPT_DBL>
+auto GetMovingAverageOfVector(std::vector<std::tuple<Trackpoint, OPT_DBL...>> const& input, Callable valueExtractor, DataOptions::Data const& data) {
+	std::vector<std::tuple<Trackpoint, OPT_DBL..., std::optional<double>>> result;
+
+	for (std::size_t i = 0; i < input.size(); ++i) {
+		std::size_t lastExistingIndex = i;
+		double sum = 0.0;
+		std::size_t summands = 0;
+		for (std::size_t j = 0; j < data.windowSize; ++j) {
+			if ((i + j) < input.size()) {
+				lastExistingIndex = (i + j);
+			}
+			auto const val = valueExtractor(input.at(lastExistingIndex));
+			if (val.has_value() && val.value() >= data.cutoffMin && val.value() <= data.cutoffMax) {
+				sum += val.value();
+				++summands;
+			}
+		}
+
+		if (summands > 0) {
+			result.push_back(std::tuple_cat(input.at(i), std::make_tuple(std::optional<double>(sum / summands))));
+		}
+		else {
+			result.push_back(std::tuple_cat(input.at(i), std::make_tuple(std::nullopt)));
+		}
+	}
+
+	return result;
+}
+
+template<typename Callable, typename... OPT_DBL>
+auto Transform(std::vector<std::tuple<Trackpoint, OPT_DBL...>> const& input, Callable valueExtractor) {
+	std::vector<std::tuple<Trackpoint, OPT_DBL..., std::optional<double>>> result;
+
+	for (auto const& i : input) {
+		auto val = valueExtractor(i);
+		result.push_back(std::tuple_cat(i, std::make_tuple(val)));
+	}
+
+	return result;
+}
+
 void MainWindow::UpdateChart() {
 	if (m_selectedFile.empty())
 		return;
 
-	if (!std::filesystem::exists(m_selectedFile)) {
-		if (DO_DEBUG) std::cerr << "Error: Input file " << m_selectedFile << " does not exist!" << std::endl;
-		return;
-	}
-
 	auto const timeStart = std::chrono::steady_clock::now();
 	if (!m_trackpoints.has_value()) {
+		if (!std::filesystem::exists(m_selectedFile)) {
+			if (DO_DEBUG) std::cerr << "Error: Input file " << m_selectedFile << " does not exist!" << std::endl;
+			ui->statusbar->showMessage(QString("Error: Input file '%1' does not exist!").arg(QString::fromStdString(m_selectedFile.string())));
+			return;
+		}
+
 		Parser parser(m_selectedFile, DO_DEBUG);
 		m_trackpoints = parser.GetTrackpoints();
 		if (DO_DEBUG) std::cout << "Got " << m_trackpoints.value().size() << " trackpoints from input file." << std::endl;
+		ui->statusbar->showMessage(QString("Got %1 trackpoints from input file.").arg(m_trackpoints.value().size()));
 	}
-	
+
 	auto const timeTps = std::chrono::steady_clock::now();
 
-	auto const speeds = GetSpeedFromTrackpoints(m_trackpoints.value());
-	auto const avgSpeeds = GetMovingAverageOfVector(speeds, m_windowSize);
+	auto const data0 = GetSpeedFromTrackpoints(m_trackpoints.value());
+	auto const data1 = GetMovingAverageOfVector(data0, [](decltype(data0)::value_type const& v) { return std::get<1>(v); }, ui->gbox_avgSpeed->getData());
+	auto const data2 = GetMovingAverageOfVector(data1, [](decltype(data1)::value_type const& v) { return std::optional<double>(std::get<0>(v).heartRateBpm); }, ui->gbox_heartRate->getData());
+	auto const data3 = Transform(data2, [&](decltype(data2)::value_type const& v) -> std::optional<double>{
+		auto const& e = std::get<2>(v);
+		if (!e.has_value()) return std::nullopt;
+		if (std::abs(e.value()) <= 0.01) return std::nullopt;
+		double const pace = 1.0 / (METERS_PER_SECOND_TO_KILOMETERS_PER_HOUR(e.value()) / 60.0);
+		return std::optional<double>(pace);
+	});
+	auto const data4 = GetMovingAverageOfVector(data3, [](decltype(data3)::value_type const& v) { return std::get<4>(v); }, ui->gbox_pace->getData());
 
 	auto const timeEnd = std::chrono::steady_clock::now();
 	ui->statusbar->showMessage(QString("Parsing %1 points from file took %2ms (%3ms in XML).").arg(m_trackpoints.value().size()).arg(std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count()).arg(std::chrono::duration_cast<std::chrono::milliseconds>(timeTps - timeStart).count()));
 
 	// Chart
-	QLineSeries* seriesAvgSpeed = new QLineSeries();
-	QLineSeries* seriesHeartBeat = new QLineSeries();
-	for (auto const& [tp, speed, avgSpeed] : avgSpeeds) {
+	bool const haveAvgSpeed = ui->gbox_avgSpeed->getData().show;
+	bool const haveAvgHeartRate = ui->gbox_heartRate->getData().show;
+	bool const haveAvgPace = ui->gbox_pace->getData().show;
+
+	QLineSeries* seriesAvgSpeed = haveAvgSpeed ? new QLineSeries() : nullptr;
+	QLineSeries* seriesAvgPace = haveAvgPace ? new QLineSeries() : nullptr;
+	QLineSeries* seriesAvgHeartBeat = haveAvgHeartRate ? new QLineSeries() : nullptr;
+	for (auto const& [tp, speed, avgSpeed, avgHeartBeat, pace, avgPace] : data4) {
 		qreal const time = tp.dateTime.toMSecsSinceEpoch();
-		if (avgSpeed.has_value()) {
+		if (haveAvgSpeed && avgSpeed.has_value()) {
 			seriesAvgSpeed->append(time, avgSpeed.value());
 		}
-		seriesHeartBeat->append(time, tp.heartRateBpm);
+		if (seriesAvgPace && avgPace.has_value()) {
+			seriesAvgPace->append(time, avgPace.value());
+		}
+		if (haveAvgHeartRate&& avgHeartBeat.has_value()) {
+			seriesAvgHeartBeat->append(time, avgHeartBeat.value());
+		}
 	}
 
 	QChart* chart = new QChart();
-	chart->addSeries(seriesAvgSpeed);
-	chart->addSeries(seriesHeartBeat);
+	if (haveAvgSpeed) chart->addSeries(seriesAvgSpeed);
+	if (haveAvgHeartRate) chart->addSeries(seriesAvgHeartBeat);
+	if (haveAvgPace) chart->addSeries(seriesAvgPace);
 
 	QDateTimeAxis* valueAxisTime = new QDateTimeAxis(chart);
 	valueAxisTime->setFormat("dd.MM.yyyy'\r\n'hh:mm:ss");
@@ -192,21 +261,36 @@ void MainWindow::UpdateChart() {
 	QValueAxis* valueAxisAvgSpeed = new QValueAxis(chart);
 	valueAxisAvgSpeed->setLabelFormat("%.2f");
 	valueAxisAvgSpeed->setTitleText("Avg. Speed in m/s");
-	chart->addAxis(valueAxisAvgSpeed, Qt::AlignLeft);
+	if (haveAvgSpeed) chart->addAxis(valueAxisAvgSpeed, Qt::AlignLeft);
 
 	QValueAxis* valueAxisHeartBeat = new QValueAxis(chart);
 	valueAxisHeartBeat->setLabelFormat("%i");
-	valueAxisHeartBeat->setTitleText("Heartrate in BPM");
-	chart->addAxis(valueAxisHeartBeat, Qt::AlignRight);
+	valueAxisHeartBeat->setTitleText("Avg. Heartrate in BPM");
+	if (haveAvgHeartRate) chart->addAxis(valueAxisHeartBeat, Qt::AlignRight);
 
-	seriesAvgSpeed->attachAxis(valueAxisTime);
-	seriesAvgSpeed->attachAxis(valueAxisAvgSpeed);
-	seriesAvgSpeed->setName("Avg. Speed in m/s");
+	QValueAxis* valueAxisPace = new QValueAxis(chart);
+	valueAxisPace->setLabelFormat("%.2f");
+	valueAxisPace->setTitleText("Avg. Pace in min/km");
+	if (haveAvgPace) chart->addAxis(valueAxisPace, Qt::AlignRight);
 
-	seriesHeartBeat->attachAxis(valueAxisTime);
-	seriesHeartBeat->attachAxis(valueAxisHeartBeat);
-	seriesHeartBeat->setName("Heartrate in BPM");
-	
+	if (haveAvgSpeed) {
+		seriesAvgSpeed->attachAxis(valueAxisTime);
+		seriesAvgSpeed->attachAxis(valueAxisAvgSpeed);
+		seriesAvgSpeed->setName("Avg. Speed in m/s");
+	}
+
+	if (haveAvgHeartRate) {
+		seriesAvgHeartBeat->attachAxis(valueAxisTime);
+		seriesAvgHeartBeat->attachAxis(valueAxisHeartBeat);
+		seriesAvgHeartBeat->setName("Avg. Heartrate in BPM");
+	}
+
+	if (haveAvgPace) {
+		seriesAvgPace->attachAxis(valueAxisTime);
+		seriesAvgPace->attachAxis(valueAxisPace);
+		seriesAvgPace->setName("Avg. Pace in min/km");
+	}
+
 	ChartView* chartView = new ChartView(chart, nullptr);
 	if (!QObject::connect(chartView, SIGNAL(newValuesUnderMouse()), this, SLOT(OnNewValuesUnderMouse()))) {
 		QMessageBox::critical(this, "Internal Error", "Failed to set up signal connection to ChartView!");
@@ -221,53 +305,11 @@ void MainWindow::UpdateChart() {
 	}
 
 	m_lastChartView = chartView;
-	ui->verticalLayout->addWidget(chartView);
-
-	// CSV
-	std::size_t counter = 1;
-	std::ofstream csvFile("avgSpeeds.csv");
-	csvFile << "Index;Date and Time;Speed in m/s;Speed in km/h;Pace in min/km;Heartbeat in bpm" << std::endl;
-	std::locale loc(std::locale(), new CommaDecimalPoint());
-	csvFile.imbue(loc);
-	for (auto const& speed : avgSpeeds) {
-		Trackpoint const& tp = std::get<0>(speed);
-
-		csvFile << counter << ";";
-		csvFile << tp.dateTime.toString(Qt::DateFormat::ISODate).toStdString() << ";";
-
-		auto const& speedInMetersPerSecond = std::get<1>(speed);
-		if (speedInMetersPerSecond.has_value()) {
-			csvFile << speedInMetersPerSecond.value();
-		}
-		csvFile << ";";
-		if (speedInMetersPerSecond.has_value()) {
-			csvFile << METERS_PER_SECOND_TO_KILOMETERS_PER_HOUR(speedInMetersPerSecond.value());
-		}
-		csvFile << ";";
-
-		if (speedInMetersPerSecond.has_value()) {
-			double const pace = 1.0 / (METERS_PER_SECOND_TO_KILOMETERS_PER_HOUR(speedInMetersPerSecond.value()) / 60.0);
-			csvFile << pace;
-		}
-		csvFile << ";";
-
-		csvFile << tp.heartRateBpm << std::endl;
-
-		++counter;
-	}
+	ui->verticalLayout->addWidget(chartView);	
 }
 
-void MainWindow::OnSliderValueChanged(int value) {
-    if (value > 0 && value <= 300) {
-        m_windowSize = value;
-		ui->windowSizeLabel->setText(QString::number(value));
-
-        UpdateChart();
-    }
-    else {
-        ui->windowSizeSlider->setValue(15);
-		ui->windowSizeLabel->setText("15");
-    }
+void MainWindow::OnDataOptionsChanged(DataOptions*) {
+	UpdateChart();
 }
 
 void MainWindow::OnNewValuesUnderMouse() {

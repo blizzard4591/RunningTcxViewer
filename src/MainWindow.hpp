@@ -7,6 +7,7 @@
 #include <QMainWindow>
 
 #include "ChartView.hpp"
+#include "DataOptions.hpp"
 #include "Trackpoint.hpp"
 
 namespace Ui {
@@ -26,13 +27,13 @@ public slots:
 
     void UpdateChart();
 
-    void OnSliderValueChanged(int value);
+    void OnDataOptionsChanged(DataOptions* options);
     void OnNewValuesUnderMouse();
+
 private:
     Ui::MainWindow *ui;
 
     std::filesystem::path m_selectedFile;
-    int m_windowSize;
     ChartView* m_lastChartView = nullptr;
     std::optional<std::vector<Trackpoint>> m_trackpoints = std::nullopt;
 };

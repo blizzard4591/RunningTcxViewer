@@ -11,6 +11,8 @@ class ChartView : public QChartView {
 public:
     ChartView(QChart* chart, QWidget* parent = nullptr);
 
+    virtual ~ChartView();
+
     std::vector<qreal> const& getValuesUnderMouse() const {
         return m_values;
     }

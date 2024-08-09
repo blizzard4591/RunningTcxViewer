@@ -15,6 +15,13 @@ ChartView::ChartView(QChart* chart, QWidget* parent)
 	setRubberBand(QChartView::RectangleRubberBand);
 }
 
+ChartView::~ChartView() {
+	if (m_chart != nullptr) {
+		delete m_chart;
+		m_chart = nullptr;
+	}
+}
+
 bool ChartView::viewportEvent(QEvent* event)
 {
 	if (event->type() == QEvent::TouchBegin) {
