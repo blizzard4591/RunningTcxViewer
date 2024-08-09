@@ -34,12 +34,16 @@ MainWindow::MainWindow(QWidget* parent)
 		QMessageBox::critical(this, "Internal Error", "Failed to set up connection for data options #1!");
 		throw;
 	}
-	if (!QObject::connect(ui->gbox_heartRate, SIGNAL(optionsChanged(DataOptions*)), this, SLOT(OnDataOptionsChanged(DataOptions*)))) {
+	if (!QObject::connect(ui->gbox_avgSpeedKmh, SIGNAL(optionsChanged(DataOptions*)), this, SLOT(OnDataOptionsChanged(DataOptions*)))) {
 		QMessageBox::critical(this, "Internal Error", "Failed to set up connection for data options #2!");
 		throw;
 	}
-	if (!QObject::connect(ui->gbox_pace, SIGNAL(optionsChanged(DataOptions*)), this, SLOT(OnDataOptionsChanged(DataOptions*)))) {
+	if (!QObject::connect(ui->gbox_heartRate, SIGNAL(optionsChanged(DataOptions*)), this, SLOT(OnDataOptionsChanged(DataOptions*)))) {
 		QMessageBox::critical(this, "Internal Error", "Failed to set up connection for data options #3!");
+		throw;
+	}
+	if (!QObject::connect(ui->gbox_pace, SIGNAL(optionsChanged(DataOptions*)), this, SLOT(OnDataOptionsChanged(DataOptions*)))) {
+		QMessageBox::critical(this, "Internal Error", "Failed to set up connection for data options #4!");
 		throw;
 	}
 
@@ -224,35 +228,47 @@ void MainWindow::UpdateChart() {
 		return std::optional<double>(pace);
 	});
 	auto const data4 = GetMovingAverageOfVector(data3, [](decltype(data3)::value_type const& v) { return std::get<4>(v); }, ui->gbox_pace->getData());
+	auto const data5 = Transform(data4, [&](decltype(data4)::value_type const& v) -> std::optional<double> {
+		auto const& e = std::get<1>(v);
+		if (!e.has_value()) return std::nullopt;
+		return std::optional<double>(METERS_PER_SECOND_TO_KILOMETERS_PER_HOUR(e.value()));
+		});
+	auto const data6 = GetMovingAverageOfVector(data5, [](decltype(data5)::value_type const& v) { return std::get<6>(v); }, ui->gbox_avgSpeedKmh->getData());
 
 	auto const timeEnd = std::chrono::steady_clock::now();
 	ui->statusbar->showMessage(QString("Parsing %1 points from file took %2ms (%3ms in XML).").arg(m_trackpoints.value().size()).arg(std::chrono::duration_cast<std::chrono::milliseconds>(timeEnd - timeStart).count()).arg(std::chrono::duration_cast<std::chrono::milliseconds>(timeTps - timeStart).count()));
 
 	// Chart
-	bool const haveAvgSpeed = ui->gbox_avgSpeed->getData().show;
+	bool const haveAvgSpeedInMs = ui->gbox_avgSpeed->getData().show;
+	bool const haveAvgSpeedInKmh = ui->gbox_avgSpeedKmh->getData().show;
 	bool const haveAvgHeartRate = ui->gbox_heartRate->getData().show;
 	bool const haveAvgPace = ui->gbox_pace->getData().show;
 
-	QLineSeries* seriesAvgSpeed = haveAvgSpeed ? new QLineSeries() : nullptr;
-	QLineSeries* seriesAvgPace = haveAvgPace ? new QLineSeries() : nullptr;
-	QLineSeries* seriesAvgHeartBeat = haveAvgHeartRate ? new QLineSeries() : nullptr;
-	for (auto const& [tp, speed, avgSpeed, avgHeartBeat, pace, avgPace] : data4) {
+	QLineSeries* seriesAvgSpeedInMs = new QLineSeries();
+	QLineSeries* seriesAvgSpeedInKmh = new QLineSeries();
+	QLineSeries* seriesAvgPace = new QLineSeries();
+	QLineSeries* seriesAvgHeartBeat = new QLineSeries();
+	for (auto const& [tp, speed, avgSpeed, avgHeartBeat, pace, avgPace, speedInKmh, avgSpeedInKmh] : data6) {
 		qreal const time = tp.dateTime.toMSecsSinceEpoch();
-		if (haveAvgSpeed && avgSpeed.has_value()) {
-			seriesAvgSpeed->append(time, avgSpeed.value());
+		if (avgSpeed.has_value()) {
+			seriesAvgSpeedInMs->append(time, avgSpeed.value());
 		}
-		if (seriesAvgPace && avgPace.has_value()) {
+		if (avgSpeedInKmh.has_value()) {
+			seriesAvgSpeedInKmh->append(time, avgSpeedInKmh.value());
+		}
+		if (avgPace.has_value()) {
 			seriesAvgPace->append(time, avgPace.value());
 		}
-		if (haveAvgHeartRate&& avgHeartBeat.has_value()) {
+		if (avgHeartBeat.has_value()) {
 			seriesAvgHeartBeat->append(time, avgHeartBeat.value());
 		}
 	}
 
 	QChart* chart = new QChart();
-	if (haveAvgSpeed) chart->addSeries(seriesAvgSpeed);
-	if (haveAvgHeartRate) chart->addSeries(seriesAvgHeartBeat);
-	if (haveAvgPace) chart->addSeries(seriesAvgPace);
+	chart->addSeries(seriesAvgSpeedInMs);
+	chart->addSeries(seriesAvgSpeedInKmh);
+	chart->addSeries(seriesAvgHeartBeat);
+	chart->addSeries(seriesAvgPace);
 
 	QDateTimeAxis* valueAxisTime = new QDateTimeAxis(chart);
 	valueAxisTime->setFormat("dd.MM.yyyy'\r\n'hh:mm:ss");
@@ -261,35 +277,42 @@ void MainWindow::UpdateChart() {
 	QValueAxis* valueAxisAvgSpeed = new QValueAxis(chart);
 	valueAxisAvgSpeed->setLabelFormat("%.2f");
 	valueAxisAvgSpeed->setTitleText("Avg. Speed in m/s");
-	if (haveAvgSpeed) chart->addAxis(valueAxisAvgSpeed, Qt::AlignLeft);
+	chart->addAxis(valueAxisAvgSpeed, Qt::AlignLeft);
+
+	QValueAxis* valueAxisAvgSpeedInKmh = new QValueAxis(chart);
+	valueAxisAvgSpeedInKmh->setLabelFormat("%.2f");
+	valueAxisAvgSpeedInKmh->setTitleText("Avg. Speed in km/h");
+	chart->addAxis(valueAxisAvgSpeedInKmh, Qt::AlignLeft);
 
 	QValueAxis* valueAxisHeartBeat = new QValueAxis(chart);
 	valueAxisHeartBeat->setLabelFormat("%i");
 	valueAxisHeartBeat->setTitleText("Avg. Heartrate in BPM");
-	if (haveAvgHeartRate) chart->addAxis(valueAxisHeartBeat, Qt::AlignRight);
+	chart->addAxis(valueAxisHeartBeat, Qt::AlignRight);
 
 	QValueAxis* valueAxisPace = new QValueAxis(chart);
 	valueAxisPace->setLabelFormat("%.2f");
 	valueAxisPace->setTitleText("Avg. Pace in min/km");
-	if (haveAvgPace) chart->addAxis(valueAxisPace, Qt::AlignRight);
+	chart->addAxis(valueAxisPace, Qt::AlignRight);
 
-	if (haveAvgSpeed) {
-		seriesAvgSpeed->attachAxis(valueAxisTime);
-		seriesAvgSpeed->attachAxis(valueAxisAvgSpeed);
-		seriesAvgSpeed->setName("Avg. Speed in m/s");
-	}
+	seriesAvgSpeedInMs->attachAxis(valueAxisTime);
+	seriesAvgSpeedInMs->attachAxis(valueAxisAvgSpeed);
+	seriesAvgSpeedInMs->setName("Avg. Speed in m/s");
+	seriesAvgSpeedInMs->setVisible(haveAvgSpeedInMs);
 
-	if (haveAvgHeartRate) {
-		seriesAvgHeartBeat->attachAxis(valueAxisTime);
-		seriesAvgHeartBeat->attachAxis(valueAxisHeartBeat);
-		seriesAvgHeartBeat->setName("Avg. Heartrate in BPM");
-	}
+	seriesAvgSpeedInKmh->attachAxis(valueAxisTime);
+	seriesAvgSpeedInKmh->attachAxis(valueAxisAvgSpeedInKmh);
+	seriesAvgSpeedInKmh->setName("Avg. Speed in km/h");
+	seriesAvgSpeedInKmh->setVisible(haveAvgSpeedInKmh);
 
-	if (haveAvgPace) {
-		seriesAvgPace->attachAxis(valueAxisTime);
-		seriesAvgPace->attachAxis(valueAxisPace);
-		seriesAvgPace->setName("Avg. Pace in min/km");
-	}
+	seriesAvgHeartBeat->attachAxis(valueAxisTime);
+	seriesAvgHeartBeat->attachAxis(valueAxisHeartBeat);
+	seriesAvgHeartBeat->setName("Avg. Heartrate in BPM");
+	seriesAvgHeartBeat->setVisible(haveAvgHeartRate);
+
+	seriesAvgPace->attachAxis(valueAxisTime);
+	seriesAvgPace->attachAxis(valueAxisPace);
+	seriesAvgPace->setName("Avg. Pace in min/km");
+	seriesAvgPace->setVisible(haveAvgPace);
 
 	ChartView* chartView = new ChartView(chart, nullptr);
 	if (!QObject::connect(chartView, SIGNAL(newValuesUnderMouse()), this, SLOT(OnNewValuesUnderMouse()))) {

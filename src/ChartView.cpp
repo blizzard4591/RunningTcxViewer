@@ -179,12 +179,40 @@ void ChartView::drawForeground(QPainter* painter, QRectF const&) {
 			}
 		}
 
+		auto const drawFunc = [&](QPointF const& mappedPoint, QPointF const& valuePoint) {
+			m_values[index++] = valuePoint.x();
+			m_values[index++] = valuePoint.y();
+
+			if (series_i->isVisible()) {
+				painter->drawPoint(mappedPoint);
+				pen2.setWidth(1);
+				painter->setPen(pen2);
+				QFont font = painter->font();
+				font.setPointSizeF(12.0f);
+				painter->setFont(font);
+				bool const isLeftSide = mappedPoint.x() > (chart()->scene()->width() / 2.0f);
+				int flags = 0;
+				QRectF rect;
+				if (isLeftSide) {
+					flags = Qt::AlignRight;
+					rect = QRectF(mappedPoint.x() - 100.f - 10.f, mappedPoint.y(), 100.f, 50.f);
+				}
+				else {
+					flags = Qt::AlignLeft;
+					rect = QRectF(mappedPoint.x() + 10.f, mappedPoint.y(), 100.f, 50.f);
+				}
+				QRectF boundingRect;
+				painter->drawText(rect, flags, QString::number(valuePoint.y()), &boundingRect);
+				painter->fillRect(boundingRect, QBrush(QColor(255, 255, 255, 255)));
+				painter->drawText(rect, flags, QString::number(valuePoint.y()));
+			}
+		};
+
 		if (exact_point.has_value()) {
 			QPointF const mappedPoint = chart()->mapToScene(chart()->mapToPosition(exact_point.value(), series_i));
 			painter->drawPoint(mappedPoint);
 			if (DO_DEBUG) std::cerr << "Found exact point." << std::endl;
-			m_values[index++] = valuePoint.x();
-			m_values[index++] = valuePoint.y();
+			drawFunc(mappedPoint, valuePoint);
 		}
 		else if (nearest_point_right.has_value() && nearest_point_left.has_value()) {
 			// do linear interpolated by my self
@@ -195,31 +223,8 @@ void ChartView::drawForeground(QPainter* painter, QRectF const&) {
 			QPointF const interpolatedPoint = QPointF(point_interpolated_x, point_interpolated_y);
 
 			QPointF const mappedPoint = chart()->mapToScene(chart()->mapToPosition(interpolatedPoint, series_i));
-			painter->drawPoint(mappedPoint);
 			if (DO_DEBUG) std::cerr << "Found interpolated point at (" << interpolatedPoint.x() << ", " << interpolatedPoint.y() << ") mapped to (" << mappedPoint.x() << ", " << mappedPoint.y() << ")." << std::endl;
-			m_values[index++] = valuePoint.x();
-			m_values[index++] = valuePoint.y();
-
-			pen2.setWidth(1);
-			painter->setPen(pen2);
-			QFont font = painter->font();
-			font.setPointSizeF(12.0f);
-			painter->setFont(font);
-			bool const isLeftSide = mappedPoint.x() > (chart()->scene()->width() / 2.0f);
-			int flags = 0;
-			QRectF rect;
-			if (isLeftSide) {
-				flags = Qt::AlignRight;
-				rect = QRectF(mappedPoint.x() - 100.f - 10.f, mappedPoint.y(), 100.f, 50.f);
-			}
-			else {
-				flags = Qt::AlignLeft;
-				rect = QRectF(mappedPoint.x() + 10.f, mappedPoint.y(), 100.f, 50.f);
-			}
-			QRectF boundingRect;
-			painter->drawText(rect, flags, QString::number(valuePoint.y()), &boundingRect);
-			painter->fillRect(boundingRect, QBrush(QColor(255, 255, 255, 255)));
-			painter->drawText(rect, flags, QString::number(valuePoint.y()));
+			drawFunc(mappedPoint, valuePoint);
 		}
 		else {
 			if (DO_DEBUG) std::cerr << "Found NO point for series!" << std::endl;

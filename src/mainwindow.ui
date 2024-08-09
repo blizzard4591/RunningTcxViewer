@@ -20,7 +20,14 @@
       <item>
        <widget class="DataOptions" name="gbox_avgSpeed">
         <property name="title">
-         <string>Avg. Speed</string>
+         <string>Avg. Speed in m/s</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="DataOptions" name="gbox_avgSpeedKmh">
+        <property name="title">
+         <string>Avg. Speed in km/h</string>
         </property>
        </widget>
       </item>
