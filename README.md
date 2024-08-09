@@ -12,3 +12,13 @@ TcxViewer is governed by the GNU GPL v2.0 license.
 ## Requirements
  - [CMake](https://cmake.org/)
  - [Qt 6](https://www.qt.io/)
+
+## Required packages on Debian/Ubuntu
+ - libgl1-mesa-dev
+ - libglx-dev
+ - cmake
+ - g++
+ - qt6-base-dev
+ - libqt6charts6-dev
+
+So, e.g. `sudo apt install libgl1-mesa-dev libglx-dev cmake g++ qt6-base-dev libqt6charts6-dev`
